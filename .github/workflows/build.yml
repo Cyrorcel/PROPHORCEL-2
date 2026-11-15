@@ -27,8 +27,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev \
-            libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libfreetype-dev libfontconfig1-dev
+          sudo apt-get install -y libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libfreetype-dev libfontconfig1-dev
 
       - name: Configurer
         if: runner.os != 'macOS'
@@ -45,4 +44,20 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp -R build/Prophorcel_artefacts/Release/VST3/Prophorcel.vst3
+          VST=$(find build -type d -name Prophorcel.vst3 | head -n 1)
+          echo "Plugin trouvé : $VST"
+          cp -R "$VST" dist/
+          ls -R dist | head -20
+
+      - name: Signature locale (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x dist/Prophorcel.vst3/Contents/MacOS/Prophorcel
+          codesign --force --deep -s - dist/Prophorcel.vst3
+          file dist/Prophorcel.vst3/Contents/MacOS/Prophorcel
+
+      - name: Publier le VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prophorcel-VST3-${{ matrix.name }}
+          path: dist
