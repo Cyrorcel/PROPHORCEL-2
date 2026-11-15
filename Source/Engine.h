@@ -33,6 +33,7 @@ struct Params
     float oscWave[4] = { 1, 1, 2, 3 };
     float oscSemi[4] = { 0, 0, 0, 0 };
     float oscFine[4] = { 0, 0, 0, 0 };
+    float oscLevel[4] = { 1, 1, 1, 1 };
     float vecX = 0.5f, vecY = 0.5f;
     float cut = 3200.f, res = 3.f, fltEnv = 2.f, keytrack = 0.5f;
     float fenvA = 0.01f, fenvD = 0.6f, fenvS = 0.3f, fenvR = 0.5f;
@@ -157,7 +158,7 @@ struct EnvState
 
 struct Voice
 {
-    bool active = false, released = false, mono = false;
+    bool active = false, released = false, mono = false, pending = false; // pending : touche relâchée, tenue par la pédale
     int note = 60;
     double pitchSemi = 60.0, targetSemi = 60.0, glideRate = 0.0;
     float lvAmp = 1.f, velShift = 0.f;
@@ -192,6 +193,8 @@ public:
             v = Voice();
         stackCount = 0;
         monoIdx = -1;
+        monoPending = false;
+        sustain = false;
         lastNote = -1;
         lfoPhase = 0.0;
         std::fill (echo.begin(), echo.end(), 0.f);
@@ -219,10 +222,42 @@ public:
 
     void setPitchBend (float norm) { bendNorm = std::clamp (norm, -1.f, 1.f); }
 
+    // Pédale de sustain (CC 64) : les touches relâchées restent tenues jusqu'au relèvement.
+    void setSustain (bool on)
+    {
+        if (sustain == on)
+            return;
+        sustain = on;
+        if (on)
+            return;
+        for (auto& v : voices)
+            if (v.active && ! v.released && v.pending)
+            {
+                v.pending = false;
+                release (v, false);
+            }
+        if (monoPending)
+        {
+            monoPending = false;
+            if (monoIdx >= 0)
+            {
+                release (voices[monoIdx], false);
+                monoIdx = -1;
+            }
+        }
+    }
+
     void noteOn (int note, float vel)
     {
         if (lastMode == 0)
         {
+            // une note encore tenue par la pédale est relâchée avant d'être rejouée
+            for (auto& v : voices)
+                if (v.active && ! v.released && v.pending && v.note == note)
+                {
+                    v.pending = false;
+                    release (v, true);
+                }
             if (findVoiceByNote (note) >= 0)
                 return;
 
@@ -253,6 +288,7 @@ public:
             if (monoIdx >= 0 && (! voices[monoIdx].active || voices[monoIdx].released))
                 monoIdx = -1;
 
+            monoPending = false;
             if (monoIdx >= 0)
                 glideTo (voices[monoIdx], note);
             else
@@ -270,7 +306,12 @@ public:
         {
             const int i = findVoiceByNote (note);
             if (i >= 0)
-                release (voices[i], false);
+            {
+                if (sustain)
+                    voices[i].pending = true;
+                else
+                    release (voices[i], false);
+            }
             return;
         }
 
@@ -288,8 +329,13 @@ public:
             return;
         if (stackCount == 0)
         {
-            release (voices[monoIdx], false);
-            monoIdx = -1;
+            if (sustain)
+                monoPending = true;
+            else
+            {
+                release (voices[monoIdx], false);
+                monoIdx = -1;
+            }
         }
         else if (voices[monoIdx].note == note)
             glideTo (voices[monoIdx], stack[stackCount - 1]);
@@ -299,9 +345,13 @@ public:
     {
         for (auto& v : voices)
             if (v.active && ! v.released)
+            {
+                v.pending = false;
                 release (v, fast);
+            }
         stackCount = 0;
         monoIdx = -1;
+        monoPending = false;
     }
 
     // Position du joystick de la note la plus récente, pour l'affichage.
@@ -476,7 +526,7 @@ private:
     int findVoiceByNote (int note) const
     {
         for (int i = 0; i < kMaxSlots; ++i)
-            if (voices[i].active && ! voices[i].released && voices[i].note == note)
+            if (voices[i].active && ! voices[i].released && ! voices[i].pending && voices[i].note == note)
                 return i;
         return -1;
     }
@@ -627,6 +677,7 @@ private:
         for (int i = 0; i < 4; ++i)
         {
             const int w = std::clamp ((int) std::lround (p.oscWave[i]), 0, kNumWaves - 1);
+            const float oscGain = oscNorm * std::clamp (p.oscLevel[i], 0.f, 1.f);
             const double semis = v.pitchSemi + (double) p.oscSemi[i];
             for (int c = 0; c < v.copies; ++c)
             {
@@ -644,7 +695,7 @@ private:
                     const int i0 = (int) fi;
                     const float fr = (float) (fi - i0);
                     const float y = tbl[i0] + (tbl[i0 + 1] - tbl[i0]) * fr;
-                    tmp[n] += y * (gStart[i] + gStep[i] * (float) n) * oscNorm;
+                    tmp[n] += y * (gStart[i] + gStep[i] * (float) n) * oscGain;
                     ph += inc;
                     if (ph >= 1.0)
                         ph -= 1.0;
@@ -711,6 +762,7 @@ private:
     int stack[kStackSize] = {};
     int stackCount = 0;
     int monoIdx = -1;
+    bool monoPending = false, sustain = false;
     int lastNote = -1;
     float bendNorm = 0.f;
     double lfoPhase = 0.0;

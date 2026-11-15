@@ -115,10 +115,11 @@ ProphorcelContent::ProphorcelContent (ProphorcelProcessor& p)
             box.addItemList (prm->choices, 1);
         styleLight (box);
         addAndMakeVisible (box);
-        box.setBounds (cx + 2, 172, 96, 24);
+        box.setBounds (cx + 2, 146, 96, 24);
         waveAtt[i] = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, "w" + String (i), box);
-        knob (("s" + String (i)).toRawUTF8(), "Transp.", fSigned, kModOsc, 44, cx, 210, 50);
-        knob (("f" + String (i)).toRawUTF8(), "Fin", fSignedCt, kModOsc, 44, cx + 50, 210, 50);
+        knob (("l" + String (i)).toRawUTF8(), "Niveau", fPct, kModOsc, 42, cx, 176, 100);
+        knob (("s" + String (i)).toRawUTF8(), "Transp.", fSigned, kModOsc, 36, cx, 250, 50);
+        knob (("f" + String (i)).toRawUTF8(), "Fin", fSignedCt, kModOsc, 36, cx + 50, 250, 50);
     }
 
     //---- filtre

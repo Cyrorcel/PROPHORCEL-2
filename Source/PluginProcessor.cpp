@@ -111,6 +111,7 @@ AudioProcessorValueTreeState::ParameterLayout ProphorcelProcessor::createLayout(
         choice (("w" + n).toRawUTF8(), (String ("Onde ") + tag[i]).toRawUTF8(), waves, defWave[i]);
         flt (("s" + n).toRawUTF8(), (String ("Demi-tons ") + tag[i]).toRawUTF8(), -24, 24, 0, 1);
         flt (("f" + n).toRawUTF8(), (String ("Accord fin ") + tag[i]).toRawUTF8(), -50, 50, 0, 0.1f, " ct");
+        flt (("l" + n).toRawUTF8(), (String ("Niveau ") + tag[i]).toRawUTF8(), 0, 1, 1, 0.01f);
     }
     flt ("vx", "Joystick X", 0, 1, 0.5f, 0.001f);
     flt ("vy", "Joystick Y", 0, 1, 0.5f, 0.001f);
@@ -196,6 +197,7 @@ void ProphorcelProcessor::readParams (proph::Params& p) const
         p.oscWave[i] = raw (("w" + n).toRawUTF8())->load();
         p.oscSemi[i] = raw (("s" + n).toRawUTF8())->load();
         p.oscFine[i] = raw (("f" + n).toRawUTF8())->load();
+        p.oscLevel[i] = raw (("l" + n).toRawUTF8())->load();
         p.venvT[i] = raw (("vt" + n).toRawUTF8())->load();
         p.venvX[i] = raw (("vx" + n).toRawUTF8())->load();
         p.venvY[i] = raw (("vy" + n).toRawUTF8())->load();
@@ -250,6 +252,8 @@ void ProphorcelProcessor::handleMidi (const MidiMessage& m)
         engine.setPitchBend (pb);
         shownBend.store (pb);
     }
+    else if (m.isController() && m.getControllerNumber() == 64)
+        engine.setSustain (m.getControllerValue() >= 64);
     else if (m.isController() && m.getControllerNumber() == 1 && raw ("venv")->load() < 0.5f)
     {
         if (auto* prm = apvts.getParameter ("vy"))
